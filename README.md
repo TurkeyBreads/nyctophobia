@@ -21,7 +21,7 @@ Discover Rooms
   ↓
 Find Items / Encounter Creatures
   ↓
-Fight or Prepare
+Fight or Flight
   ↓
 Explore Further
   ↓
