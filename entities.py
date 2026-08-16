@@ -1,6 +1,6 @@
 import random
-from display import Display, display_player_stats
-from items import HealingItem, BuffItem, DebuffItem, AbilityItem, Weapon
+from display import Display, display_player_stats, display_entity_stats
+from items import Weapon, HealingItem, BuffItem, DebuffItem, AbilityItem
 
 class Entity:
     def __init__(self, health, attack, defence, armour=None, name="Entity"):
@@ -45,6 +45,9 @@ class Entity:
         for effect in expired:
             self.effects.remove(effect)
 
+    def get_stats(self):
+        display_entity_stats(self)
+
 
 class Creature(Entity):
     def __init__(self, creature_type, health, attack, defence, armour=None):
@@ -81,14 +84,13 @@ class Monster(Entity):
         self.phase = 1
 
     def choose_action(self, player, maze, move_chance):
-        if not self.alive:
-            return False
-
-        if self.position == player.position:
-            return False
-
         current_room = maze.get_room(self.position)
-        if not current_room:
+
+        if (
+                not self.alive
+                or self.position == player.position
+                or not current_room
+        ):
             return False
 
         if random.random() < move_chance:
@@ -116,8 +118,8 @@ class Monster(Entity):
 
 
 class Player(Entity):
-    def __init__(self, position, health=100, attack=10, defence=10):
-        super().__init__(health, attack, defence, name="Adventurer")
+    def __init__(self, position, name="Adventurer", health=100, attack=10, defence=10):
+        super().__init__(health, attack, defence, name=name)
         self.position = position
         self.items = []
         self.weapon = None
@@ -126,7 +128,7 @@ class Player(Entity):
 
     @Display.choice_input(
         "Select direction to move",
-        lambda self, maze: [
+        lambda self, maze, *args, **kwargs: [
             d for d, r in [
                 ("North", maze.get_room(self.position).north),
                 ("South", maze.get_room(self.position).south),
@@ -166,7 +168,7 @@ class Player(Entity):
 
     @Display.choice_input(
         "Select item to use",
-        lambda self: [f"{i.name} — {i.description}" for i in self.items]
+        lambda self, *args, **kwargs: [f"{i.name} — {i.description}" for i in self.items]
     )
     @Display.info
     def use_item(self, choice=None, target=None):
@@ -176,7 +178,7 @@ class Player(Entity):
         item = self.items[choice - 1]
         result = item.use(self, target)
 
-        if isinstance(item, (DebuffItem, AbilityItem)):
+        if isinstance(item, (HealingItem, BuffItem, DebuffItem, AbilityItem)):
             if result != "There is no target.":
                 self.items.remove(item)
 
@@ -184,3 +186,18 @@ class Player(Entity):
 
     def get_stats(self):
         display_player_stats(self)
+
+
+if __name__ == "__main__":
+    e = Entity(100, 10, 5)
+    e.get_stats()
+
+    e.change_stat("attack", 2)
+    e.change_stat("defence", 2)
+    e.change_stat("health", 5)
+    print("e is alive" if e.alive else "e is dead")
+    e.get_stats()
+
+    creatures = [Shadowling(), HollowStalker(), GloomWraith(), AbyssalHorror()]
+    for c in creatures:
+        c.get_stats()

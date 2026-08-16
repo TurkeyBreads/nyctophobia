@@ -18,6 +18,7 @@ class Display:
                     value = input("Choice: ")
                     if value.isdigit() and 1 <= int(value) <= len(actual_choices):
                         return func(*args, choice=int(value), **kwargs)
+
                     print("Please enter a valid choice.")
 
             return wrapper
@@ -47,14 +48,21 @@ class Display:
     def battle(func):
         def wrapper(*args, **kwargs):
             text = func(*args, **kwargs)
+            if text is None:
+                return None
 
-            print()
             for line in str(text).split("\n"):
-                print(f"          /BATTLE/  {line}")
+                print(f"            /BATTLE/  {line}")
 
             return text
 
         return wrapper
+
+    @staticmethod
+    def pause_buffer(msg="Press Enter to continue..."):
+        print()
+        print(f"  ◈ {msg} ◈")
+        input("  └─> ")
 
 
 def render_room_ascii(room):
@@ -124,18 +132,32 @@ def display_player_stats(player):
         f"KILLS:    {player.kills}"
     ]
 
-    print("\n┌" + "─" * 68 + "┐")
-    print("│                         CHARACTER STATS                            │")
-    print("├" + "─" * 32 + "┬" + "─" * 35 + "┤")
+    print("\n┌" + "─" * (Display.WIDTH - 32) + "┐")
+    print(f"│ {'CHARACTER STATS':^{Display.WIDTH - 34}} │")
+    print("├" + "─" * 32 + "┬" + "─" * (Display.WIDTH - 65) + "┤")
 
     for i in range(max(len(player_art), len(stats_lines))):
         art_part = player_art[i] if i < len(player_art) else ""
         stat_part = stats_lines[i] if i < len(stats_lines) else ""
-        print(f"│ {art_part:<30} │ {stat_part:<33} │")
+        print(f"│ {art_part:<30} │ {stat_part:<{Display.WIDTH - 67}} │")
 
-    print("├" + "─" * 32 + "┴" + "─" * 35 + "┤")
-    print(f"│ INVENTORY: {item_names[:55]:<55} │")
-    print("└" + "─" * 68 + "┘")
+    print("├" + "─" * 32 + "┴" + "─" * (Display.WIDTH - 65) + "┤")
+    print(f"│ INVENTORY: {item_names:<{Display.WIDTH - 45}} │")
+    print("└" + "─" * (Display.WIDTH - 32) + "┘")
+
+    Display.pause_buffer("Press Enter to close Player Stats")
+
+
+def display_entity_stats(entity):
+    print("\n┌" + "─" * (Display.WIDTH - 2) + "┐")
+    print(f"│ {entity.name.upper():<{Display.WIDTH - 4}} │")
+    print("├" + "─" * (Display.WIDTH - 2) + "┤")
+    print(f"│ {'HEALTH:':<9}{f'{entity.health}/{entity.max_health} HP':<{Display.WIDTH - 13}} │")
+    print(f"│ {'ATTACK:':<9}{str(entity.attack):<{Display.WIDTH - 13}} │")
+    print(f"│ {'DEFENCE:':<9}{str(entity.defence):<{Display.WIDTH - 13}} │")
+    print("└" + "─" * (Display.WIDTH - 2) + "┘")
+
+    Display.pause_buffer("Press Enter to close Creature Stats")
 
 
 def show_death_screen(player):
@@ -161,18 +183,6 @@ def show_death_screen(player):
                         ⠀⠀⠀⠛⠀⠈⠻⠷⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⠟
 """
 
-    ending_art = """
-                    ⢕⢕⢕⢕⠁⢜⠕⢁⣴⣿⡇⢓⢕⢵⢐⢕⢕⠕⢁⣾⢿⣧⠑⢕⢕⠄⢑⢕⠅⢕
-                    ⢕⢕⠵⢁⠔⢁⣤⣤⣶⣶⣶⡐⣕⢽⠐⢕⠕⣡⣾⣶⣶⣶⣤⡁⢓⢕⠄⢑⢅⢑
-                    ⠍⣧⠄⣶⣾⣿⣿⣿⣿⣿⣿⣷⣔⢕⢄⢡⣾⣿⣿⣿⣿⣿⣿⣿⣦⡑⢕⢤⠱⢐
-                    ⢠⢕⠅⣾⣿⠋⢿⣿⣿⣿⠉⣿⣿⣷⣦⣶⣽⣿⣿⠈⣿⣿⣿⣿⠏⢹⣷⣷⡅⢐
-                    ⣔⢕⢥⢻⣿⡀⠈⠛⠛⠁⢠⣿⣿⣿⣿⣿⣿⣿⣿⡀⠈⠛⠛⠁⠄⣼⣿⣿⡇⢔
-                    ⢕⢕⢽⢸⢟⢟⢖⢖⢤⣶⡟⢻⣿⡿⠻⣿⣿⡟⢀⣿⣦⢤⢤⢔⢞⢿⢿⣿⠁⢕
-                    ⢕⢕⠅⣐⢕⢕⢕⢕⢕⣿⣿⡄⠛⢀⣦⠈⠛⢁⣼⣿⢗⢕⢕⢕⢕⢕⢕⡏⣘⢕
-    ╻ ╻╻ ╻╻ ╻       ⢕⢕⠅⢓⣕⣕⣕⣕⣵⣿⣿⣿⣾⣿⣿⣿⣿⣿⣿⣿⣷⣕⢕⢕⢕⢕⡵⢀⢕⢕
-    ┃ ┃┃╻┃┃ ┃       ⢑⢕⠃⡈⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢃⢕⢕⢕
-    ┗━┛┗┻┛┗━┛       ⣆⢕⠄⢱⣄⠛⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⢁⢕⢕⠕⢁"""
-
     print("\n" + "=" * Display.WIDTH)
     print(death_art)
     print("=" * Display.WIDTH)
@@ -184,18 +194,44 @@ def show_death_screen(player):
     print(f"       │ Final Attack:        {player.attack:<35} │")
     print(f"       │ Final Defence:       {player.defence:<35} │")
     print(f"       └──────────────────────────────────────────────────────────┘")
-    print(ending_art)
+
+    Display.pause_buffer("Press Enter to return to Main Menu")
 
 
 if __name__ == "__main__":
     from room import Room
-    from entities import Player
+    from entities import Player, Shadowling
 
     room1 = Room(1, 1, 2, 3, 4, 5, 0, 0, is_stairwell=False)
     room2 = Room(2, 1, 0, 1, 0, 6, 0, 7, is_stairwell=True)
-    human = Player(1)
+    human = Player(1, name="Christopher")
+    shadowling1 = Shadowling()
 
     render_room_ascii(room1)
     render_room_ascii(room2)
     display_player_stats(human)
+    display_entity_stats(shadowling1)
     show_death_screen(human)
+
+    @Display.info
+    def test_info():
+        return "This is an information message."
+
+
+    @Display.battle
+    def test_battle():
+        return f"{human.name} attacks {shadowling1.name}!"
+
+
+    @Display.choice_input(
+        "Choose an action:",
+        lambda: ["Attack", "Defend", "Use Item", "Run"]
+    )
+    def test_choice(choice=None):
+        print(f"You chose: {choice}")
+
+
+    test_info()
+    test_battle()
+    test_choice()
+    Display.pause_buffer()

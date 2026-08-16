@@ -115,3 +115,7 @@ def create_items():
         "X": AbilityItem("Flash Bomb", "Deals direct damage.", 25),
         "X2": AbilityItem("Void Blast", "Unleashes raw force for massive damage.", 50)
     }
+
+
+if __name__ == "__main__":
+    pass
