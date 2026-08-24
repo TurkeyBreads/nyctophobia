@@ -3,6 +3,7 @@ from config import GameConfig
 from data_loader import load_3d_maze
 from display import Display, render_room_ascii, show_death_screen
 from entities import Player, Monster
+from items import DebuffItem, AbilityItem
 
 config = GameConfig()
 
@@ -60,93 +61,151 @@ def run_backstory(player_name):
     Display.pause_buffer("Press Enter to step into the dark...")
 
 
-def battle(player, enemy, maze):
+def _connected_rooms(player, maze):
+    room = maze.get_room(player.position)
+    return [
+        r for r in [room.north, room.south, room.east, room.west, room.down, room.up]
+        if r != 0 and maze.get_room(r) is not None
+    ]
+
+
+def _choose_target(enemies):
+    living = [e for e in enemies if e.alive]
+    if len(living) == 1:
+        return living[0]
+
+    choices = [f"{e.name} — {e.health}/{e.max_health} HP" for e in living]
+
+    @Display.choice_input("Select target", lambda: choices)
+    def select(choice=None):
+        return living[choice - 1]
+
+    return select()
+
+
+def battle(player, enemies, maze):
+    """Fight all living creatures in a room as one encounter.
+
+    The player gets one action per round; every surviving enemy gets one attack
+    afterwards. This makes multi-enemy rooms simultaneous rather than a series
+    of isolated one-on-one fights.
+    """
+    enemies = [e for e in enemies if e.alive]
+    if not enemies:
+        return "DEFEATED", ""
+
     print("\n" + "#" * Display.WIDTH)
-    print(f"BATTLE: {player.name} vs {enemy.name}")
+    print(f"BATTLE: {player.name} vs {', '.join(e.name for e in enemies)}")
     print("#" * Display.WIDTH)
 
-    while player.alive and enemy.alive:
+    while player.alive and any(e.alive for e in enemies):
         player.process_effects()
-        enemy.process_effects()
+        for enemy in enemies:
+            if enemy.alive:
+                enemy.process_effects()
 
+        living = [e for e in enemies if e.alive]
         print(f"\n{player.name}: {player.health}/{player.max_health} HP")
-        print(f"{enemy.name}: {enemy.health}/{enemy.max_health} HP")
+        for enemy in living:
+            print(f"{enemy.name}: {enemy.health}/{enemy.max_health} HP")
 
-        choices = ["Attack", "View Stats", "Run"]
-        if player.items:
-            choices.insert(1, "Use Item")
+        choices = ["Attack", "Use Item", "View Stats", "Run"]
 
         @Display.choice_input("What would you like to do?", lambda: choices)
         def process_battle(choice=None):
             return choices[choice - 1]
 
-        match process_battle():
-            case "Attack":
-                player.fight(enemy)
-            case "Use Item":
-                player.use_item(target=enemy)
+        action = process_battle()
+
+        if action == "Attack":
+            target = _choose_target(living)
+            player.fight(target)
+
+        elif action == "Use Item":
+            item_choices = [f"{i.name} — {i.description}" for i in player.items] + ["Cancel"]
+
+            @Display.choice_input("Select item to use", lambda: item_choices)
+            def select_item(choice=None):
+                return choice
+
+            item_choice = select_item()
+            if item_choice == len(item_choices):
                 continue
-            case "View Stats":
-                player.get_stats()
+
+            selected_item = player.items[item_choice - 1]
+            target = None
+            if isinstance(selected_item, (DebuffItem, AbilityItem)):
+                target = _choose_target(living)
+
+            result = player.use_item_at(item_choice, target)
+            if result == "CANCELLED":
+                continue
+
+        elif action == "View Stats":
+            player.get_stats()
+            for enemy in living:
                 enemy.get_stats()
+            continue
+
+        elif action == "Run":
+            connected = _connected_rooms(player, maze)
+            if not connected:
+                render_turn_log(["[FLEE] There is nowhere to run! You are trapped and must fight!"])
                 continue
-            case "Run":
-                current_room = maze.get_room(player.position)
-                connected = [r for r in [
-                    current_room.north, current_room.south, current_room.east,
-                    current_room.west, current_room.down, current_room.up
-                ] if r != 0]
 
-                if not connected:
-                    render_turn_log(["[FLEE] There is nowhere to run! You are trapped and must fight!"])
-                    continue
+            target_room = random.choice(connected)
+            flee_msg = f"You panicked and fled to Room {target_room}!"
 
-                target_room = random.choice(connected)
-                flee_msg = f"You panicked and fled to Room {target_room}!"
+            if player.items:
+                dropped = random.choice(player.items)
+                player.items.remove(dropped)
+                if player.weapon is dropped:
+                    player.attack -= dropped.attack_bonus
+                    player.weapon = None
+                maze.get_room(player.position).items.append(dropped)
+                flee_msg += f"\nIn your rush, you accidentally dropped your {dropped.name}!"
+            else:
+                trip_dmg = random.randint(10, 20)
+                player.health = max(0, player.health - trip_dmg)
+                flee_msg += f"\nWith nothing to drop, you tripped and took {trip_dmg} damage!"
 
-                if player.items:
-                    dropped = random.choice(player.items)
-                    player.items.remove(dropped)
+            player.position = target_room
+            player.level = maze.get_room(target_room).level
+            return "FLED", flee_msg
 
-                    if hasattr(player, 'weapon') and player.weapon == dropped:
-                        player.attack -= dropped.attack_bonus
-                        player.weapon = None
+        # Check boss phase transitions immediately after the player's action.
+        for enemy in living:
+            if isinstance(enemy, Monster) and enemy.check_phase_transition():
+                print("\n" + "!" * Display.WIDTH)
+                print(f"THE SHADOWS CONVERGE! {enemy.name} ENTERS PHASE 2 WITH REGENERATED HEALTH AND GREATER ATTACK!")
+                print("!" * Display.WIDTH)
 
-                    current_room.items.append(dropped)
-                    flee_msg += f"\nIn your rush, you accidentally dropped your {dropped.name}!"
-                else:
-                    trip_dmg = random.randint(10, 20)
-                    player.health = max(0, player.health - trip_dmg)
-                    flee_msg += f"\nWith nothing to drop, you tripped flat on your face taking {trip_dmg} damage!"
+        # Dead enemies do not get a retaliatory attack.
+        for enemy in [e for e in enemies if e.alive]:
+            enemy.fight(player)
+            if not player.alive:
+                return "DEFEATED", ""
 
-                player.position = target_room
-                player.level = maze.get_room(target_room).level
+    # Award kills only once, after the encounter is actually over.
+    defeated = [e for e in enemies if not e.alive]
+    for enemy in defeated:
+        if isinstance(enemy, Monster) and enemy.phase == 2:
+            continue
+        player.kills += 1
+        stat_gain = random.choice(["attack", "defence"])
+        amount = random.randint(1, 3)
+        setattr(player, stat_gain, getattr(player, stat_gain) + amount)
+        print(f"\nDefeated {enemy.name}! Empowered by victory, your {stat_gain.upper()} increased by +{amount}!")
 
-                return "FLED", flee_msg
-
-        if isinstance(enemy, Monster) and enemy.check_phase_transition():
-            print("\n" + "!" * Display.WIDTH)
-            print(f"THE SHADOWS CONVERGE! {enemy.name} ENTERS PHASE 2 WITH REGENERATED HEALTH AND GREATER ATTACK!")
-            print("!" * Display.WIDTH)
-
-        if not enemy.alive:
-            player.kills += 1
-            stat_gain = random.choice(["attack", "defence"])
-            amount = random.randint(1, 3)
-            setattr(player, stat_gain, getattr(player, stat_gain) + amount)
-            print(f"\nDefeated {enemy.name}! Empowered by victory, your {stat_gain.upper()} increased by +{amount}!")
-            return True
-
-        enemy.fight(player)
-        if not player.alive:
-            return False
-
-    return player.alive
-
+    return "DEFEATED", ""
 
 def game_loop():
     print("\n" + "_" * Display.WIDTH)
-    player_name = input("Enter your Adventurer's name: ").strip() or "Adventurer"
+    while True:
+        player_name = input("Enter your Adventurer's name: ").strip()
+        if player_name and len(player_name) <= 20 and player_name.replace(" ", "").isalnum():
+            break
+        print("Please enter a name containing only letters/numbers/spaces (1–20 characters).")
     print("_" * Display.WIDTH)
 
     run_backstory(player_name)
@@ -162,39 +221,49 @@ def game_loop():
         fled = False
         turn_logs = []
 
-        for creature in list(room.living_creatures):
-            result, combat_msg = battle(player, creature, maze)
+        living_creatures = list(room.living_creatures)
+        if living_creatures:
+            result, combat_msg = battle(player, living_creatures, maze)
             if result == "FLED":
                 fled = True
                 turn_logs.append(f"[FLEE] {combat_msg}")
-                break
-            if not player.alive:
-                break
 
-        if maze.monster and not maze.monster.alive:
-            render_turn_log(["THE DARKNESS HAS FALLEN!\nYou have slain the Nycta and escaped the underground abyss."])
+        if not player.alive:
+            break
+
+        if maze.monster and not maze.monster.alive and maze.monster.phase == 2:
+            render_turn_log(["THE DARKNESS HAS FALLEN!\nYou have slain Nycta and escaped the underground abyss."])
+            player.get_stats()
             Display.pause_buffer("Press Enter to finish")
             return
 
+        room = maze.get_room(player.position)
         choices = ["Move", "Use Item", "View Stats", "Quit"]
         if room.items:
             choices.insert(1, "Pick Up Item")
+        if config.debug_mode:
+            choices.insert(len(choices) - 1, "Debug")
 
         if not fled:
             @Display.choice_input("What would you like to do?", lambda: choices)
             def process_turn(choice=None):
                 return choices[choice - 1]
 
-            match process_turn():
+            action = process_turn()
+            match action:
                 case "Move":
                     turn_logs.append(f"[ACTION] {player.move(maze)}")
                 case "Pick Up Item":
                     item = room.items.pop(0)
                     turn_logs.append(f"[ACTION] {player.pick_up(item, config.auto_equip)}")
                 case "Use Item":
-                    turn_logs.append(f"[ACTION] {player.use_item()}")
+                    result = player.use_item()
+                    if result != "CANCELLED":
+                        turn_logs.append(f"[ACTION] {result}")
                 case "View Stats":
                     player.get_stats()
+                case "Debug":
+                    debug_menu(player, maze)
                 case "Quit":
                     return
 
@@ -204,7 +273,6 @@ def game_loop():
                 turn_logs.append("[NOTIFICATION] Something vast and unseen moves through the corridors...")
 
         display_room(player, maze)
-
         if turn_logs:
             render_turn_log(turn_logs)
 
@@ -212,11 +280,42 @@ def game_loop():
         show_death_screen(player)
 
 
+def debug_menu(player, maze):
+    choices = ["Teleport", "Give All Items", "Heal to Full", "Back"]
+
+    @Display.choice_input("DEBUG MENU", lambda: choices)
+    def choose(choice=None):
+        return choices[choice - 1]
+
+    while True:
+        action = choose()
+        if action == "Back":
+            return
+        if action == "Teleport":
+            rooms = [r for r in maze.rooms if r.level in (1, 2, 10)]
+            @Display.choice_input("Select room", lambda: [f"Room {r.room_number} (Level {r.level})" for r in rooms])
+            def select_room(choice=None):
+                return rooms[choice - 1]
+            room = select_room()
+            player.position = room.room_number
+            player.level = room.level
+        elif action == "Give All Items":
+            from items import create_items
+            player.items.extend(create_items().values())
+            print("All items added to inventory.")
+            Display.pause_buffer()
+        elif action == "Heal to Full":
+            player.health = player.max_health
+            print("Player healed to full health.")
+            Display.pause_buffer()
+
+
 @Display.choice_input(
     "OPTIONS MENU",
     lambda: [
         f"Difficulty: [{config.difficulty}]",
         f"Auto-Equip Weapons: [{config.auto_equip}]",
+        f"Debug Mode: [{config.debug_mode}]",
         "Back to Main Menu"
     ]
 )
@@ -228,6 +327,8 @@ def options_menu(choice=None):
         case 2:
             config.auto_equip = not config.auto_equip
         case 3:
+            config.debug_mode = not config.debug_mode
+        case 4:
             return "BACK"
 
     return None

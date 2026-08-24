@@ -27,9 +27,11 @@ class HealingItem(Item):
         self.healing = healing
 
     def use(self, user, target=None):
+        if user.health >= user.max_health:
+            return f"{user.name} is already at full health. {self.name} was not used."
+
         old_health = user.health
         user.health = min(user.max_health, user.health + self.healing)
-
         return f"{user.name} uses {self.name} and restores {user.health - old_health} HP."
 
 
@@ -39,15 +41,15 @@ class Weapon(Item):
         self.attack_bonus = attack_bonus
 
     def use(self, user, target=None):
-        if hasattr(user, 'weapon') and user.weapon is self:
+        if getattr(user, "weapon", None) is self:
             return f"{user.name} is already wielding the {self.name}."
 
-        if hasattr(user, 'weapon') and user.weapon is not None:
-            user.attack -= user.weapon.attack_bonus
+        old_weapon = getattr(user, "weapon", None)
+        if old_weapon is not None:
+            user.attack -= old_weapon.attack_bonus
 
         user.weapon = self
         user.attack += self.attack_bonus
-
         return f"{user.name} equips the {self.name}, attack +{self.attack_bonus}."
 
 
@@ -60,10 +62,13 @@ class BuffItem(Item):
 
     def use(self, user, target=None):
         effect = Effect(self.name, self.attribute, self.amount, self.duration)
-        effect.apply(user)
-        user.effects.append(effect)
+        result = user.add_or_replace_effect(effect)
+        if not result:
+            return (f"{user.name} already has an equal or stronger {self.attribute} buff. "
+                    f"{self.name} was not used.")
 
-        return f"{user.name} uses {self.name}, {self.attribute} +{self.amount} for {self.duration} turns."
+        return (f"{user.name} uses {self.name}, {self.attribute} +{self.amount} "
+                f"for {self.duration} turns.")
 
 
 class DebuffItem(Item):
@@ -78,10 +83,13 @@ class DebuffItem(Item):
             return "There is no target."
 
         effect = Effect(self.name, self.attribute, -self.amount, self.duration)
-        effect.apply(target)
-        target.effects.append(effect)
+        result = target.add_or_replace_effect(effect)
+        if not result:
+            return (f"{target.name} already has an equal or stronger {self.attribute} "
+                    f"debuff. {self.name} was not used.")
 
-        return f"{target.name}'s {self.attribute} is reduced by {self.amount} for {self.duration} turns."
+        return (f"{target.name}'s {self.attribute} is reduced by {self.amount} "
+                f"for {self.duration} turns.")
 
 
 class AbilityItem(Item):
@@ -97,8 +105,7 @@ class AbilityItem(Item):
         target.health = max(0, target.health - self.damage)
 
         if self.effect:
-            self.effect.apply(target)
-            target.effects.append(self.effect)
+            target.add_or_replace_effect(self.effect)
 
         return f"{user.name} uses {self.name}, dealing {self.damage} damage to {target.name}!"
 

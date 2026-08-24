@@ -8,6 +8,7 @@ class GameConfig:
     def __init__(self):
         self.difficulty = "MEDIUM"
         self.auto_equip = True
+        self.debug_mode = False
 
     @property
     def boss_hp(self):
