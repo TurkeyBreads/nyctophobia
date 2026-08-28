@@ -135,31 +135,6 @@ The project follows these requirements:
 * Designed for a single player
 * Developed collaboratively by the team
 
-## 🔧 Planned Updates & Fixes
-
-- [ ] Doesn't show Item if defeating a Creature in a Room with Item
-- [ ] Make Boss only stay on Level 10
-- [ ] Add Boss dialogue/conversation + 2 endings
-- [ ] Write Room numbers in double digits
-- [ ] Multiple Items/Monsters
-- [ ] Make negative Room numbers letters instead
-- [ ] Make battling with multiple creatures at once
-- [ ] Name validation
-- [ ] Save state for the game
-
-### Additional possible features to be implemented
-
-- [ ] Add docstrings
-- [ ] Make a Debug Mode (teleport + change stats)
-- [ ] Power scaling throughout levels / balancing (algorithmically generated)
-- [ ] New Monsters, new Items
-- [ ] Add full story before and after (add NPCs)
-- [ ] Randomly generated maze
-
-> **Note:** Player Level always assumes you start at 1, because it only changes on `move()`.
-
----
-
 ## Update 2.1.0 Notes
 
 ### 🛠️ Bug Fixes & Refactoring
