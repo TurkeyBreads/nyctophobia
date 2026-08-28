@@ -107,7 +107,7 @@ class Monster(Entity):
         super().__init__(health, attack, defence, "Living Darkness", name)
         self.position = position
         self.phase = 1
-        self.level = 10
+        self.level = 2
 
     def choose_action(self, player, maze, move_chance):
         current_room = maze.get_room(self.position)
@@ -119,7 +119,7 @@ class Monster(Entity):
             r for r in [current_room.north, current_room.south, current_room.east,
                         current_room.west, current_room.down, current_room.up]
             if r != 0 and maze.get_room(r) is not None
-            and maze.get_room(r).level == 10
+            and maze.get_room(r).level == 2
         ]
 
         if possible_rooms and random.random() < move_chance:
