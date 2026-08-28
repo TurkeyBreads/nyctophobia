@@ -84,12 +84,6 @@ def _choose_target(enemies):
 
 
 def battle(player, enemies, maze):
-    """Fight all living creatures in a room as one encounter.
-
-    The player gets one action per round; every surviving enemy gets one attack
-    afterwards. This makes multi-enemy rooms simultaneous rather than a series
-    of isolated one-on-one fights.
-    """
     enemies = [e for e in enemies if e.alive]
     if not enemies:
         return "DEFEATED", ""
@@ -173,20 +167,17 @@ def battle(player, enemies, maze):
             player.level = maze.get_room(target_room).level
             return "FLED", flee_msg
 
-        # Check boss phase transitions immediately after the player's action.
         for enemy in living:
             if isinstance(enemy, Monster) and enemy.check_phase_transition():
                 print("\n" + "!" * Display.WIDTH)
                 print(f"THE SHADOWS CONVERGE! {enemy.name} ENTERS PHASE 2 WITH REGENERATED HEALTH AND GREATER ATTACK!")
                 print("!" * Display.WIDTH)
 
-        # Dead enemies do not get a retaliatory attack.
         for enemy in [e for e in enemies if e.alive]:
             enemy.fight(player)
             if not player.alive:
                 return "DEFEATED", ""
 
-    # Award kills only once, after the encounter is actually over.
     defeated = [e for e in enemies if not e.alive]
     for enemy in defeated:
         if isinstance(enemy, Monster) and enemy.phase == 2:
@@ -288,26 +279,29 @@ def debug_menu(player, maze):
         return choices[choice - 1]
 
     while True:
-        action = choose()
-        if action == "Back":
-            return
-        if action == "Teleport":
-            rooms = [r for r in maze.rooms if r.level in (1, 2, 10)]
-            @Display.choice_input("Select room", lambda: [f"Room {r.room_number} (Level {r.level})" for r in rooms])
-            def select_room(choice=None):
-                return rooms[choice - 1]
-            room = select_room()
-            player.position = room.room_number
-            player.level = room.level
-        elif action == "Give All Items":
-            from items import create_items
-            player.items.extend(create_items().values())
-            print("All items added to inventory.")
-            Display.pause_buffer()
-        elif action == "Heal to Full":
-            player.health = player.max_health
-            print("Player healed to full health.")
-            Display.pause_buffer()
+        match choose():
+            case "Back":
+                return
+            case "Teleport":
+                rooms = [r for r in maze.rooms if r.level in (1, 2, 10)]
+
+                @Display.choice_input("Select room", lambda: [f"Room {r.room_number} (Level {r.level})" for r in rooms])
+                def select_room(choice=None):
+                    return rooms[choice - 1]
+                
+                room = select_room()
+                player.position = room.room_number
+                player.level = room.level
+            case "Give All Items":
+                from items import create_items
+                
+                player.items.extend(create_items().values())
+                print("All items added to inventory.")
+                Display.pause_buffer()
+            case "Heal to Full":
+                player.health = player.max_health
+                print("Player healed to full health.")
+                Display.pause_buffer()
 
 
 @Display.choice_input(
